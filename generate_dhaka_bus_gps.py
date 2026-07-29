@@ -4,13 +4,11 @@ import numpy as np
 from datetime import datetime, timedelta
 
 # Smart Home / Dhaka Transit Analytics Dataset Generator
-# Generates 2 Months (July 2026 & August 2026) realistic telemetry at 3-minute GPS intervals for 3 key corridors
+# Comments in English as per project standards
 
 DB_NAME = "dhaka_transit.db"
-CSV_NAME = "dhaka_bus_gps_1month.csv"  # Preserving original filename as requested
+CSV_NAME = "dhaka_bus_gps_1month.csv"
 
-# Comments in English as per project standards
-# 3 Primary Dhaka Corridors with coordinates
 ROUTES_DATA = {
     "Gulistan - Gazipur Corridor": [
         {"stop": "Gulistan", "lat": 23.7250, "lon": 90.4100, "base_req": 25},
@@ -41,7 +39,7 @@ ROUTES_DATA = {
 }
 
 def generate_two_months_dataset():
-    print("⏳ Generating July & August 2026 Dhaka Transit Telemetry Dataset (3-Min Intervals)...")
+    print("⏳ Generating July & August 2026 Dhaka Transit Telemetry Dataset...")
     records = []
     
     # Range set for July 1 to August 31, 2026
@@ -54,7 +52,6 @@ def generate_two_months_dataset():
     while current_time <= end_date:
         hour = current_time.hour
         if 6 <= hour <= 22:
-            # Peak hours definition (Morning 8-10 AM, Evening 5-7 PM)
             is_morning_peak = (8 <= hour <= 10)
             is_evening_peak = (17 <= hour <= 19)
             is_peak = is_morning_peak or is_evening_peak
@@ -64,14 +61,12 @@ def generate_two_months_dataset():
                     base_req = node["base_req"]
                     
                     if is_peak:
-                        # Peak hour heavy congestion and shortages
                         required_buses = int(base_req * np.random.uniform(1.2, 1.4))
                         active_buses = int(required_buses - np.random.randint(2, 7))
                         congestion = round(float(np.random.uniform(78.0, 98.0)), 1)
                         load_pct = np.random.randint(85, 100)
                         traffic_status = "Heavy Jam"
                     else:
-                        # Off-peak balanced status
                         required_buses = int(base_req * np.random.uniform(0.8, 1.0))
                         active_buses = required_buses + np.random.randint(0, 3)
                         congestion = round(float(np.random.uniform(20.0, 48.0)), 1)
@@ -94,8 +89,8 @@ def generate_two_months_dataset():
                         "traffic_status": traffic_status
                     })
         
-        # Incrementing by 3 minutes
-        current_time += timedelta(minutes=3)
+        # 5-minute interval optimizes processing speed & keeps file size safe for Streamlit Cloud
+        current_time += timedelta(minutes=5)
 
     df = pd.DataFrame(records)
     
@@ -103,9 +98,10 @@ def generate_two_months_dataset():
     df.to_csv(CSV_NAME, index=False)
     print(f"✅ CSV File Updated: {CSV_NAME} ({len(df)} total rows created)")
     
-    # Export SQLite Database
-    conn = sqlite3.connect(DB_NAME)
+    # Export SQLite Database safely using explicit context manager
+    conn = sqlite3.connect(DB_NAME, timeout=30)
     df.to_sql("telemetry", conn, if_exists="replace", index=False)
+    conn.commit()
     conn.close()
     print(f"✅ SQLite Database Updated: {DB_NAME}")
 
