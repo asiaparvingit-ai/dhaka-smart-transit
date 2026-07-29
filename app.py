@@ -1,5 +1,4 @@
 import os
-import subprocess
 import sqlite3
 from datetime import datetime
 import pytz
@@ -10,6 +9,9 @@ import numpy as np
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
+
+# Import generator function directly to avoid subprocess issues on Streamlit Cloud
+from generate_dhaka_bus_gps import generate_two_months_dataset
 
 # Smart Home Project - Smart Dhaka Transit Analytics Engine Configuration
 # Comments in English as per project standards
@@ -30,14 +32,15 @@ st.markdown("<p style='text-align:center; color:gray;'>Department of Computer Sc
 
 DB_NAME = "dhaka_transit.db"
 
-# Auto-generate DB if missing or empty on server / deployment environment
+# Auto-generate DB if missing or corrupt on server / deployment environment
 def ensure_database_exists():
     if not os.path.exists(DB_NAME) or os.path.getsize(DB_NAME) == 0:
         st.info("⏳ Generating Telemetry Database... Please wait a few seconds.")
         try:
-            subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
+            generate_two_months_dataset()
+            st.success("✅ Database Generated Successfully!")
         except Exception as e:
-            st.error(f"Error executing database generator script: {e}")
+            st.error(f"Error generating telemetry database: {e}")
 
 ensure_database_exists()
 
@@ -68,7 +71,7 @@ ALTERNATE_ROUTES = {
 
 # Fetch Network Data from Database with fallback and error handling
 def load_db_data(selected_route, date_str, hour_int):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=30)
     time_filter = f"{date_str} {hour_int:02d}:%"
     
     try:
@@ -84,11 +87,10 @@ def load_db_data(selected_route, date_str, hour_int):
             if df.empty:
                 query = "SELECT * FROM telemetry WHERE route_name = ? LIMIT 50"
                 df = pd.read_sql_query(query, conn, params=(selected_route,))
-    except Exception as e:
+    except Exception:
         conn.close()
-        # Fallback to regenerate database if table is missing or corrupt
-        subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
-        conn = sqlite3.connect(DB_NAME)
+        generate_two_months_dataset()
+        conn = sqlite3.connect(DB_NAME, timeout=30)
         query = "SELECT * FROM telemetry LIMIT 50"
         df = pd.read_sql_query(query, conn)
 
@@ -96,7 +98,7 @@ def load_db_data(selected_route, date_str, hour_int):
     return df
 
 def load_hourly_trend(selected_route, date_str):
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_NAME, timeout=30)
     date_filter = f"{date_str}%"
     
     try:
@@ -149,7 +151,6 @@ now = datetime.now(dhaka_tz)
 
 if "Real-Time" in time_mode:
     live_date_formatted = now.strftime("%Y-%m-%d")
-    # Minute level string (removing seconds to prevent flickering/re-rendering)
     live_time_str = now.strftime("%d %B, %Y @ %H:%M Hrs")
     
     selected_date = live_date_formatted
@@ -180,8 +181,8 @@ db_query_date = selected_date if selected_date.startswith("2026-07") else "2026-
 telemetry_df = load_db_data(selected_route, db_query_date, selected_hour)
 
 if telemetry_df.empty:
-    st.warning("⚠️ No database telemetry found for selected window. Re-generating telemetry database...")
-    subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
+    st.warning("⚠️ No database telemetry found. Re-generating database...")
+    generate_two_months_dataset()
     st.rerun()
 
 # Aggregate Node Metrics
@@ -194,9 +195,8 @@ nodes_df = telemetry_df.groupby('stop_name').agg({
     'congestion_pct': 'mean'
 }).reset_index()
 
-# REAL-TIME CONGESTION ADJUSTMENT FACTOR (STABLE SEED PER MINUTE)
+# REAL-TIME CONGESTION ADJUSTMENT FACTOR
 def get_time_adjusted_congestion(base_cong, hour, stop_name):
-    # Use deterministic seed based on stop name and hour to avoid random movement on click
     seed_val = hash(stop_name + str(hour)) % 100
     np.random.seed(seed_val)
     
@@ -214,7 +214,6 @@ for idx, row in nodes_df.iterrows():
     police_info = st.session_state.police_incidents.get(node_name, {"status": "Road Clear / Normal", "note": ""})
     police_status = police_info["status"]
     
-    # Stable real-time congestion
     cong = get_time_adjusted_congestion(row['congestion_pct'], selected_hour, node_name)
     
     active = int(row['active_buses'])
@@ -291,19 +290,15 @@ with col_left:
         
         fig_time = go.Figure()
         
-        # Highlight Morning Peak (8 AM - 10 AM)
         fig_time.add_vrect(x0=8, x1=10, fillcolor="rgba(239, 68, 68, 0.15)", line_width=0, annotation_text="Morning Peak", annotation_position="top left")
-        # Highlight Evening Peak (5 PM - 7 PM)
         fig_time.add_vrect(x0=17, x1=19, fillcolor="rgba(239, 68, 68, 0.15)", line_width=0, annotation_text="Evening Peak", annotation_position="top left")
         
-        # Historical / Ingested Congestion Line
         fig_time.add_trace(go.Scatter(
             x=hourly_df['hour'], y=hourly_df['congestion_pct'],
             mode='lines+markers', name='Observed Congestion (%)',
             line=dict(color='#EF4444', width=3), marker=dict(size=7)
         ))
         
-        # AI Forecast Line
         forecast_y = hourly_df['congestion_pct'] + np.sin(hourly_df['hour']) * 2.5
         fig_time.add_trace(go.Scatter(
             x=hourly_df['hour'], y=forecast_y,
