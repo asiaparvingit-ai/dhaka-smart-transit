@@ -159,8 +159,13 @@ if "Real-Time" in time_mode:
     display_time_str = f"🔴 LIVE: {live_time_str}"
     st.sidebar.info(f"🌐 System Live Clock:\n{live_time_str}")
 else:
-    selected_day = st.sidebar.slider("Select Day of July 2026", 1, 31, now.day if now.month == 7 else 28)
-    selected_date = f"2026-07-{selected_day:02d}"
+    # Selected Month & Day Selection for July and August 2026
+    selected_month = st.sidebar.selectbox("Select Month", ["July 2026", "August 2026"])
+    month_num = "07" if "July" in selected_month else "08"
+    
+    selected_day = st.sidebar.slider("Select Day of Month", 1, 31, 15)
+    selected_date = f"2026-{month_num}-{selected_day:02d}"
+    
     selected_hour = st.sidebar.slider("Select Hour (24h Format)", 0, 23, 9)
     display_time_str = f"📅 CUSTOM: {selected_date} @ {selected_hour:02d}:00 Hrs"
 
@@ -177,7 +182,7 @@ if st.sidebar.button("Broadcast Traffic Advisory"):
     st.sidebar.success(f"Updated {target_node} Status!")
 
 # Query Database
-db_query_date = selected_date if selected_date.startswith("2026-07") else "2026-07-28"
+db_query_date = selected_date
 telemetry_df = load_db_data(selected_route, db_query_date, selected_hour)
 
 if telemetry_df.empty:
