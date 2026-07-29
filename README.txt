@@ -1,7 +1,7 @@
 ========================================================================
    AI-DRIVEN DHAKA TRANSIT VISUAL ANALYTICS & SIGNAL OPTIMIZATION
 ========================================================================
-Project Name : Smart Dhaka Transit Engine
+Project Name : Visula_Analytics_for_Public_Transport_Optimization
 Department   : Computer Science & Engineering (Thesis Prototype)
 Framework    : Python + Streamlit + SQLite3 + Plotly + Folium
 ========================================================================
