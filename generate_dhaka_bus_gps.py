@@ -3,9 +3,6 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-# Smart Home / Dhaka Transit Analytics Dataset Generator
-# Comments in English as per project standards
-
 DB_NAME = "dhaka_transit.db"
 CSV_NAME = "dhaka_bus_gps_1month.csv"
 
@@ -42,7 +39,6 @@ def generate_two_months_dataset():
     print("⏳ Generating July & August 2026 Dhaka Transit Telemetry Dataset...")
     records = []
     
-    # Range set for July 1 to August 31, 2026
     start_date = datetime(2026, 7, 1, 6, 0, 0)
     end_date = datetime(2026, 8, 31, 22, 0, 0)
     
@@ -89,21 +85,16 @@ def generate_two_months_dataset():
                         "traffic_status": traffic_status
                     })
         
-        # 5-minute interval optimizes processing speed & keeps file size safe for Streamlit Cloud
         current_time += timedelta(minutes=5)
 
     df = pd.DataFrame(records)
-    
-    # Export CSV File
     df.to_csv(CSV_NAME, index=False)
-    print(f"✅ CSV File Updated: {CSV_NAME} ({len(df)} total rows created)")
     
-    # Export SQLite Database safely using explicit context manager
     conn = sqlite3.connect(DB_NAME, timeout=30)
     df.to_sql("telemetry", conn, if_exists="replace", index=False)
     conn.commit()
     conn.close()
-    print(f"✅ SQLite Database Updated: {DB_NAME}")
+    print("✅ SQLite Database Generated Successfully!")
 
 if __name__ == "__main__":
     generate_two_months_dataset()
