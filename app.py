@@ -30,10 +30,16 @@ st.markdown("<p style='text-align:center; color:gray;'>Department of Computer Sc
 
 DB_NAME = "dhaka_transit.db"
 
-# Auto-generate DB if missing on server / deployment environment
-if not os.path.exists(DB_NAME):
-    st.info("⏳ Generating Telemetry Database... Please wait a few seconds.")
-    subprocess.run(["python", "generate_dhaka_bus_gps.py"])
+# Auto-generate DB if missing or empty on server / deployment environment
+def ensure_database_exists():
+    if not os.path.exists(DB_NAME) or os.path.getsize(DB_NAME) == 0:
+        st.info("⏳ Generating Telemetry Database... Please wait a few seconds.")
+        try:
+            subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
+        except Exception as e:
+            st.error(f"Error executing database generator script: {e}")
+
+ensure_database_exists()
 
 # Diversion Routing Paths for Map
 DIVERSION_PATHS = {
@@ -60,42 +66,55 @@ ALTERNATE_ROUTES = {
     "Gabtoli": "👉 Diversion: Beribadh Road -> Babubazar Bridge link."
 }
 
-# Fetch Network Data from Database with fallback handling
+# Fetch Network Data from Database with fallback and error handling
 def load_db_data(selected_route, date_str, hour_int):
     conn = sqlite3.connect(DB_NAME)
     time_filter = f"{date_str} {hour_int:02d}:%"
     
-    if selected_route == "All Dhaka Corridors":
-        query = f"SELECT * FROM telemetry WHERE timestamp LIKE '{time_filter}'"
-        df = pd.read_sql_query(query, conn)
-        if df.empty:
-            query = "SELECT * FROM telemetry LIMIT 50"
+    try:
+        if selected_route == "All Dhaka Corridors":
+            query = f"SELECT * FROM telemetry WHERE timestamp LIKE '{time_filter}'"
             df = pd.read_sql_query(query, conn)
-    else:
-        query = f"SELECT * FROM telemetry WHERE route_name = ? AND timestamp LIKE '{time_filter}'"
-        df = pd.read_sql_query(query, conn, params=(selected_route,))
-        if df.empty:
-            query = "SELECT * FROM telemetry WHERE route_name = ? LIMIT 50"
+            if df.empty:
+                query = "SELECT * FROM telemetry LIMIT 50"
+                df = pd.read_sql_query(query, conn)
+        else:
+            query = f"SELECT * FROM telemetry WHERE route_name = ? AND timestamp LIKE '{time_filter}'"
             df = pd.read_sql_query(query, conn, params=(selected_route,))
-        
+            if df.empty:
+                query = "SELECT * FROM telemetry WHERE route_name = ? LIMIT 50"
+                df = pd.read_sql_query(query, conn, params=(selected_route,))
+    except Exception as e:
+        conn.close()
+        # Fallback to regenerate database if table is missing or corrupt
+        subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
+        conn = sqlite3.connect(DB_NAME)
+        query = "SELECT * FROM telemetry LIMIT 50"
+        df = pd.read_sql_query(query, conn)
+
     conn.close()
     return df
 
 def load_hourly_trend(selected_route, date_str):
     conn = sqlite3.connect(DB_NAME)
     date_filter = f"{date_str}%"
-    if selected_route == "All Dhaka Corridors":
-        query = f"SELECT timestamp, congestion_pct FROM telemetry WHERE timestamp LIKE '{date_filter}'"
-        df = pd.read_sql_query(query, conn)
-        if df.empty:
-            query = "SELECT timestamp, congestion_pct FROM telemetry"
+    
+    try:
+        if selected_route == "All Dhaka Corridors":
+            query = f"SELECT timestamp, congestion_pct FROM telemetry WHERE timestamp LIKE '{date_filter}'"
             df = pd.read_sql_query(query, conn)
-    else:
-        query = f"SELECT timestamp, congestion_pct FROM telemetry WHERE route_name = ? AND timestamp LIKE '{date_filter}'"
-        df = pd.read_sql_query(query, conn, params=(selected_route,))
-        if df.empty:
-            query = "SELECT timestamp, congestion_pct FROM telemetry WHERE route_name = ?"
+            if df.empty:
+                query = "SELECT timestamp, congestion_pct FROM telemetry"
+                df = pd.read_sql_query(query, conn)
+        else:
+            query = f"SELECT timestamp, congestion_pct FROM telemetry WHERE route_name = ? AND timestamp LIKE '{date_filter}'"
             df = pd.read_sql_query(query, conn, params=(selected_route,))
+            if df.empty:
+                query = "SELECT timestamp, congestion_pct FROM telemetry WHERE route_name = ?"
+                df = pd.read_sql_query(query, conn, params=(selected_route,))
+    except Exception:
+        df = pd.DataFrame()
+
     conn.close()
     
     if not df.empty:
@@ -161,8 +180,9 @@ db_query_date = selected_date if selected_date.startswith("2026-07") else "2026-
 telemetry_df = load_db_data(selected_route, db_query_date, selected_hour)
 
 if telemetry_df.empty:
-    st.warning("⚠️ No database telemetry found for selected window. Please run 'python generate_dhaka_bus_gps.py' first.")
-    st.stop()
+    st.warning("⚠️ No database telemetry found for selected window. Re-generating telemetry database...")
+    subprocess.run(["python", "generate_dhaka_bus_gps.py"], check=True)
+    st.rerun()
 
 # Aggregate Node Metrics
 nodes_df = telemetry_df.groupby('stop_name').agg({
