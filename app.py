@@ -1,10 +1,12 @@
+import os
+import subprocess
+import sqlite3
+from datetime import datetime
+import pytz
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import sqlite3
-
-from datetime import datetime
-import pytz
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
@@ -27,6 +29,11 @@ st.markdown("<div class='main-title'>🚌 AI-Driven Dhaka Transit Visual Analyti
 st.markdown("<p style='text-align:center; color:gray;'>Department of Computer Science & Engineering | Thesis Prototype Corridor</p>", unsafe_allow_html=True)
 
 DB_NAME = "dhaka_transit.db"
+
+# Auto-generate DB if missing on server / deployment environment
+if not os.path.exists(DB_NAME):
+    st.info("⏳ Generating Telemetry Database... Please wait a few seconds.")
+    subprocess.run(["python", "generate_dhaka_bus_gps.py"])
 
 # Diversion Routing Paths for Map
 DIVERSION_PATHS = {
@@ -114,7 +121,7 @@ selected_route = st.sidebar.selectbox("Select Route Corridor", corridor_list)
 
 time_mode = st.sidebar.radio(
     "Select Time Sync Mode",
-    ["🔴 Real-Time Live Sync (বর্তমান সময়)", "📅 Custom Date & Hour Selection"]
+    ["🔴 Real-Time Live Sync (বর্তমান সময়)", "📅 Custom Date & Hour Selection"]
 )
 
 # Convert Time to Dhaka Timezone (BST UTC+6)
@@ -369,6 +376,6 @@ st.dataframe(display_df, use_container_width=True, hide_index=True)
 st.markdown("<div class='insight-box'>", unsafe_allow_html=True)
 st.subheader("📝 Technical & Theoretical Thesis Interpretation")
 st.markdown("""
-**1. Spatially Vectorized Arterial Re-routing:** The macro-routing layer explicitly avoids residential alleys, secondary edges, or high-security restricted sectors. Upon an administrative override, the algorithm dynamically maps a $PolyLine$ array constrained to prime arterial corridors to sustain heavy transit bus volume without gridlocking inner-city neighborhoods.
+**1. Spatially Vectorized Arterial Re-routing:** The macro-routing layer explicitly avoids residential alleys, secondary edges, or high-security restricted sectors. Upon an administrative override, the algorithm dynamically maps a PolyLine array constrained to prime arterial corridors to sustain heavy transit bus volume without gridlocking inner-city neighborhoods.
 """)
 st.markdown("</div>", unsafe_allow_html=True)
