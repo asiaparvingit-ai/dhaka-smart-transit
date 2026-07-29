@@ -4,6 +4,7 @@ import numpy as np
 import sqlite3
 
 from datetime import datetime
+import pytz
 import plotly.graph_objects as go
 import folium
 from streamlit_folium import st_folium
@@ -116,7 +117,9 @@ time_mode = st.sidebar.radio(
     ["🔴 Real-Time Live Sync (বর্তমান সময়)", "📅 Custom Date & Hour Selection"]
 )
 
-now = datetime.now()
+# Convert Time to Dhaka Timezone (BST UTC+6)
+dhaka_tz = pytz.timezone('Asia/Dhaka')
+now = datetime.now(dhaka_tz)
 
 if "Real-Time" in time_mode:
     live_date_formatted = now.strftime("%Y-%m-%d")
